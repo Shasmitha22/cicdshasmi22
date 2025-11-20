@@ -7,6 +7,10 @@ pipeline {
         REPO_NAME       = "myapp"
         IMAGE_TAG       = "${GIT_COMMIT}"
         ECR_URI         = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}"
+
+        // EC2 Information
+        EC2_HOST        = "13.232.192.0"
+        EC2_USER        = "ubuntu"
     }
 
     stages {
@@ -25,45 +29,47 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${REPO_NAME}:${IMAGE_TAG} ."
+                sh """
+                docker build -t ${REPO_NAME}:${IMAGE_TAG} .
+                """
             }
         }
 
-        stage('Login to ECR') {
+        stage('Push to ECR') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     sh """
-                        aws ecr get-login-password --region ${AWS_REGION} | \
-                        docker login --username AWS --password-stdin ${ECR_URI}
+                    aws ecr get-login-password --region ${AWS_REGION} | \
+                    docker login --username AWS --password-stdin ${ECR_URI}
+
+                    docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+                    docker push ${ECR_URI}:${IMAGE_TAG}
                     """
                 }
             }
         }
 
-        stage('Push Image') {
+        stage('Deploy on EC2') {
             steps {
-                sh """
-                    docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                    docker push ${ECR_URI}:${IMAGE_TAG}
-                """
-            }
-        }
-
-        stage('Deploy to ECS') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
+                sshagent(['ec2-ssh']) {
                     sh """
-                        aws ecs update-service \
-                            --cluster cicd-cluster \
-                            --service myapp-service \
-                            --force-new-deployment \
-                            --region ${AWS_REGION}
+                    ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} '
+                        echo "Logging into ECR..."
+                        aws ecr get-login-password --region ${AWS_REGION} |
+                        docker login --username AWS --password-stdin ${ECR_URI}
+
+                        echo "Pulling latest image..."
+                        docker pull ${ECR_URI}:${IMAGE_TAG}
+
+                        echo "Stopping old container..."
+                        docker stop myapp || true
+                        docker rm myapp || true
+
+                        echo "Starting new container..."
+                        docker run -d --name myapp -p 3000:3000 ${ECR_URI}:${IMAGE_TAG}
+
+                        echo "Deployment completed!"
+                    '
                     """
                 }
             }
@@ -72,10 +78,10 @@ pipeline {
 
     post {
         success {
-            echo "Deployment successful!"
+            echo "🎉 Deployment successful! Visit http://${EC2_HOST}:3000"
         }
         failure {
-            echo "Pipeline failed!"
+            echo "❌ Deployment failed. Check logs."
         }
     }
 }
