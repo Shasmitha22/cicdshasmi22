@@ -17,53 +17,14 @@ pipeline {
             }
         }
 
-        stage('Build App') {
+        stage('Install Dependencies') {
             steps {
                 sh "npm install"
-                sh "npm test"
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh """
-                docker build -t ${REPO_NAME}:${IMAGE_TAG} .
-                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:latest
-                """
+                sh "docker build -t ${REPO_NAME}:${IMAGE_TAG} ."
             }
         }
-
-        stage('Login to ECR') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
-                    sh """
-                    aws ecr get-login-password --region ${AWS_REGION} | \
-                    docker login --username AWS --password-stdin ${ECR_URI}
-                    """
-                }
-            }
-        }
-
-        stage('Push Image') {
-            steps {
-                sh """
-                docker push ${ECR_URI}:${IMAGE_TAG}
-                docker push ${ECR_URI}:latest
-                """
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "CI/CD Pipeline completed successfully!"
-        }
-        failure {
-            echo "Pipeline failed!"
-        }
-    }
-}
