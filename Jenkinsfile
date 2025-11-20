@@ -26,7 +26,11 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${REPO_NAME}:${IMAGE_TAG} ."
+                sh """
+                docker build -t ${REPO_NAME}:${IMAGE_TAG} .
+                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:latest
+                """
             }
         }
 
@@ -46,15 +50,10 @@ pipeline {
 
         stage('Push Image') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-creds'
-                ]]) {
-                    sh """
-                    docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                    docker push ${ECR_URI}:${IMAGE_TAG}
-                    """
-                }
+                sh """
+                docker push ${ECR_URI}:${IMAGE_TAG}
+                docker push ${ECR_URI}:latest
+                """
             }
         }
     }
