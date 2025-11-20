@@ -2,14 +2,15 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-south-1"
-        AWS_ACCOUNT_ID = "<YOUR_AWS_ACCOUNT_ID>"
-        REPO_NAME = "myapp"
-        IMAGE_TAG = "${env.GIT_COMMIT}"
-        ECR_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}"
+        AWS_REGION      = "ap-south-1"
+        AWS_ACCOUNT_ID  = "253985439142"
+        REPO_NAME       = "myapp"
+        IMAGE_TAG       = "${env.GIT_COMMIT}"
+        ECR_URI         = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPO_NAME}"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -31,19 +32,23 @@ pipeline {
 
         stage('Login to ECR') {
             steps {
-                sh """
-                aws ecr get-login-password --region ${AWS_REGION} | \
-                docker login --username AWS --password-stdin ${ECR_URI}
-                """
+                withCredentials([aws(credentialsId: 'aws-creds', region: 'ap-south-1')]) {
+                    sh """
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${ECR_URI}
+                    """
+                }
             }
         }
 
         stage('Push Image') {
             steps {
-                sh """
-                docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                docker push ${ECR_URI}:${IMAGE_TAG}
-                """
+                withCredentials([aws(credentialsId: 'aws-creds', region: 'ap-south-1')]) {
+                    sh """
+                        docker tag ${REPO_NAME}:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
+                        docker push ${ECR_URI}:${IMAGE_TAG}
+                    """
+                }
             }
         }
     }
