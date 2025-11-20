@@ -5,7 +5,7 @@ const HOST = '0.0.0.0';
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, {"Content-Type": "text/plain"});
-  res.end("Hello CI CD  Pipeline with Jenkins + Docker + AWS!");
+  res.end("🚀 Auto Deployment working with Jenkins + EC2!");
 });
 
 server.listen(PORT, HOST, () => {
